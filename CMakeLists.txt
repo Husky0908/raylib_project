@@ -5,8 +5,8 @@ include(FetchContent)
 find_package(OpenGL REQUIRED)
 
 set(WITH_PIC ON)
-set(GLFW_BUILD_X11 OFF)
-set(GLFW_BUILD_WAYLAND ON)
+set(GLFW_BUILD_X11 ON)
+set(GLFW_BUILD_WAYLAND OFF)
 FetchContent_Declare(
   raylib
   URL      https://github.com/raysan5/raylib/archive/refs/tags/6.0.tar.gz
