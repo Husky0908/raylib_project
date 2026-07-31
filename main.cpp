@@ -60,8 +60,8 @@ public:
         dash_time = dash_time + GetFrameTime();
         if (dash_time >= 0.35) { state = "MOVE"; }
     }
-    virtual void small_hit() = 0;
-    virtual void big_hit() = 0;
+    virtual void small_hit(int plus_degrees, float hitting_time) = 0;
+    virtual void big_hit(bool press_button) = 0;
     virtual void drink_potion() = 0;
     virtual void draw() = 0;
     virtual void get_input() = 0;
@@ -74,23 +74,47 @@ public:
 };
 
 class Knight : public Player {
+protected:
+    bool big_hit_fine;
+
 public:
     Knight() : Player() {}
 
-    void small_hit() override {
+    void small_hit(int plus_degrees, float hitting_time) override {
         hit_time = hit_time + GetFrameTime();
-        degrees = degrees + 100 * GetFrameTime() * 5;
-        if (hit_time >= 0.2) {
+        degrees = degrees + plus_degrees * GetFrameTime() * hitting_time;
+        if (hit_time >= (1 / hitting_time)) {
             state = "MOVE";
             hit_time = 0.0;
         }
     }
-    void big_hit() override {}
+    void big_hit(bool press_button) override {
+        if (press_button) {
+            hit_time = hit_time + GetFrameTime();
+            if (hit_time >= 1) { big_hit_fine = true; }
+        } else if (big_hit_fine) {
+            if (degrees == 0) {
+                get_hit_degrees();
+                hit_time = 0.0;
+            }
+            small_hit(360, 2);
+        } else {
+            state = "MOVE";
+            hit_time = 0.0;
+        }
+    }
     void drink_potion() override {}
     void draw() override {
         DrawCircleV({x, y}, 40, BLUE);
         if (state == "SMALL HIT") {
             DrawRectanglePro({x, y - 5, 80, 10}, {0, 5}, degrees, GRAY);
+        }
+        if (state == "BIG HIT") {
+            if (!(degrees == 0)) {
+                DrawRectanglePro({x, y - 5, 80, 10}, {0, 5}, degrees, GRAY);
+            } else if (!(big_hit_fine)) {
+                DrawRectangle(x - (30 * hit_time / 2), y - (30 * hit_time / 2), 30 * hit_time, 30 * hit_time, GRAY);
+            } else { DrawRectangle(x - 15, y - 15, 30, 30, BLACK); }
         }
     }
     void get_input() override {
@@ -108,6 +132,12 @@ public:
                 state = "SMALL HIT";
                 get_hit_degrees();
             }
+            if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_UP) && state == "MOVE" && hit_time >= 0.25) {
+                hit_time = 0.0;
+                big_hit_fine = false;
+                degrees = 0;
+                state = "BIG HIT";
+            }
         }
 
         if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN) && state == "MOVE" && dash_time >= 1) {
@@ -120,7 +150,9 @@ public:
             dash();
         }
         if (state == "SMALL HIT") {
-            small_hit();
+            small_hit(100, 8.0);
+        } else if (state == "BIG HIT") {
+            big_hit(IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_UP));
         } else { hit_time = hit_time + GetFrameTime(); }
     }
     void get_hit_degrees() override {
