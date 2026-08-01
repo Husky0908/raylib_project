@@ -25,6 +25,9 @@ protected:
     Player() {
         health = 10;
         energy = 10;
+        max_energy = 10;
+        energy_time = 0.0;
+        no_energy = false;
         state = "MOVE";
         x = 0.0;
         y = 50.0;
@@ -34,6 +37,8 @@ protected:
     
     int health;
     int energy;
+    int max_energy;
+    float energy_time;
     float x;
     float y;
     float speed;
@@ -45,6 +50,8 @@ protected:
     float vector;
     float degrees;
     float hit_time;
+    bool no_energy;
+    float no_energy_time;
     
 public:
     virtual ~Player() {}
@@ -71,6 +78,15 @@ public:
         left_stick_Y = left_stick_Y / vector;
     }
     virtual void get_hit_degrees() = 0;
+    void get_energy() {
+        if (energy < max_energy) {
+            energy_time = energy_time + GetFrameTime();
+            if (energy_time >= 1.5) {
+                energy = energy + 1;
+                energy_time = 0.0;
+            }
+        } else { energy_time = 0; }
+    }
 };
 
 class Knight : public Player {
@@ -89,13 +105,14 @@ public:
         }
     }
     void big_hit(bool press_button) override {
-        if (press_button) {
+        if (press_button && degrees == 0) {
             hit_time = hit_time + GetFrameTime();
-            if (hit_time >= 1) { big_hit_fine = true; }
+            if (hit_time >= 0.5) { big_hit_fine = true; }
         } else if (big_hit_fine) {
             if (degrees == 0) {
                 get_hit_degrees();
                 hit_time = 0.0;
+                energy = energy - 2;
             }
             small_hit(360, 2);
         } else {
@@ -106,6 +123,11 @@ public:
     void drink_potion() override {}
     void draw() override {
         DrawCircleV({x, y}, 40, BLUE);
+        if (no_energy) {
+            no_energy_time = no_energy_time + GetFrameTime();
+            DrawText(TextFormat("E: %i/%i\nNO ENERGY", energy, max_energy), 20, 40, 30, PURPLE);
+            if (no_energy_time >= 1) { no_energy = false; }
+        } else { DrawText(TextFormat("E: %i/%i", energy, max_energy), 20, 40, 25, BLUE); }
         if (state == "SMALL HIT") {
             DrawRectanglePro({x, y - 5, 80, 10}, {0, 5}, degrees, GRAY);
         }
@@ -113,7 +135,7 @@ public:
             if (!(degrees == 0)) {
                 DrawRectanglePro({x, y - 5, 80, 10}, {0, 5}, degrees, GRAY);
             } else if (!(big_hit_fine)) {
-                DrawRectangle(x - (30 * hit_time / 2), y - (30 * hit_time / 2), 30 * hit_time, 30 * hit_time, GRAY);
+                DrawRectangle(x - (30 * hit_time), y - (30 * hit_time), 30 * hit_time * 2, 30 * hit_time * 2, GRAY);
             } else { DrawRectangle(x - 15, y - 15, 30, 30, BLACK); }
         }
     }
@@ -128,23 +150,40 @@ public:
             if (!(left_stick_X == 0.0) || !(left_stick_Y == 0.0)) { move(); }
 
             if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_LEFT) && state == "MOVE" && hit_time >= 0.25) {
-                hit_time = 0.0;
-                state = "SMALL HIT";
-                get_hit_degrees();
+                if (energy >= 1) {
+                    hit_time = 0.0;
+                    state = "SMALL HIT";
+                    energy = energy - 1;
+                    get_hit_degrees();
+                } else {
+                    no_energy = true;
+                    no_energy_time = 0.0;
+                }
             }
             if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_UP) && state == "MOVE" && hit_time >= 0.25) {
-                hit_time = 0.0;
-                big_hit_fine = false;
-                degrees = 0;
-                state = "BIG HIT";
+                if (energy >= 2) {
+                    hit_time = 0.0;
+                    big_hit_fine = false;
+                    degrees = 0;
+                    state = "BIG HIT";
+                } else {
+                    no_energy = true;
+                    no_energy_time = 0.0;
+                }
             }
         }
 
         if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN) && state == "MOVE" && dash_time >= 1) {
-            get_vector();
-            state = "DASH";
-            dash_time = 0.0;
-            speed = 575.0;
+            if (energy >= 1) {
+                get_vector();
+                energy = energy - 1;
+                state = "DASH";
+                dash_time = 0.0;
+                speed = 575.0;
+            } else {
+                no_energy = true;
+                no_energy_time = 0.0;
+            }
         }
         if (state == "DASH") {
             dash();
@@ -176,6 +215,7 @@ int main()
     
     while (!WindowShouldClose())
     {
+        player->get_energy();
         player->get_input();
         
         BeginDrawing();
