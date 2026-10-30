@@ -2,6 +2,7 @@
 #include <string>
 #include <iostream>
 #include <cmath>
+#include <vector>
 
 struct RaylibContext {
     RaylibContext(int widht, int height, int fps) {
@@ -19,6 +20,12 @@ struct RaylibContext {
         SetTargetFPS(targetFPS);
     }
 };
+
+void get_vector(float &vec_x, float &vec_y) {
+    float vector = sqrt(vec_x * vec_x + vec_y * vec_y);
+    vec_x = vec_x / vector;
+    vec_y = vec_y / vector;
+}
 
 class Player {
 protected:
@@ -56,7 +63,7 @@ protected:
 public:
     virtual ~Player() {}
     void move() {
-        get_vector();
+        get_vector(&left_stick_X, &left_stick_Y);
         
         x = x + GetFrameTime() * speed * left_stick_X;
         y = y + GetFrameTime() * speed * left_stick_Y;
@@ -72,11 +79,6 @@ public:
     virtual void drink_potion() = 0;
     virtual void draw() = 0;
     virtual void get_input() = 0;
-    void get_vector() {
-        vector = sqrt(left_stick_X * left_stick_X + left_stick_Y * left_stick_Y);
-        left_stick_X = left_stick_X / vector;
-        left_stick_Y = left_stick_Y / vector;
-    }
     virtual void get_hit_degrees() = 0;
     void get_energy() {
         if (energy < max_energy) {
@@ -86,6 +88,12 @@ public:
                 energy_time = 0.0;
             }
         } else { energy_time = 0; }
+    }
+    float my_x_coordinate() {
+        return x;
+    }
+    float my_y_coordinate() {
+        return y;
     }
 };
 
@@ -175,7 +183,7 @@ public:
 
         if (IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN) && state == "MOVE" && dash_time >= 1) {
             if (energy >= 1) {
-                get_vector();
+                get_vector(&left_stick_X, &left_stick_Y);
                 energy = energy - 1;
                 state = "DASH";
                 dash_time = 0.0;
@@ -204,12 +212,63 @@ public:
 
 };
 
+class Enemy {
+protected:
+    Enemy() {
+        health = 4;
+        speed = 1.0;
+        x = 300.0;
+        y = 50.0;
+        state = "MOVE";
+    }
+    
+    int health;
+    float speed;
+    float x;
+    float y;
+    std::string state;
+    float vector_x;
+    float vector_y;
+    
+public:
+    virtual ~Enemy() {}
+    void move(Player* player) {
+        vector_x = player->my_x_coordinate() - x;
+        vector_y = player->my_y_coordinate() - y;
+        get_vector(float* vector_x, float* vector_y);
+        
+        x = x + GetFrameTime() * speed * vector_x;
+        y = y + GetFrameTime() * speed * vector_y;
+    }
+    virtual void attact() = 0;
+    virtual void draw() = 0;
+    virtual void ai(Player* player) = 0;
+    virtual void get_hit_degrees() = 0;
+};
+
+class Small_Knight : public Enemy {
+public:
+    Small_Knight() : Enemy() {}
+    void attact() override {}
+    void draw() override {
+        DrawRectangle(x - 15, y - 15, 30, 30, GREEN);
+    }
+    void ai(Player* player) override {
+        if (state == "MOVE") {
+            move(player);
+        }
+    }
+    void get_hit_degrees() override {}
+};
+
 int main()
 {
     RaylibContext ralibcontext(1080, 620, 80);
     Player* player;
+    std::vector<Enemy*> enemies;
 
     player = new Knight();
+    enemies.push_back(new Small_Knight());
     
     ralibcontext.init_window();
     
@@ -217,6 +276,10 @@ int main()
     {
         player->get_energy();
         player->get_input();
+        for (Enemy* enemy : enemies) {
+            enemy->ai(player);
+            enemy->draw();
+        }
         
         BeginDrawing();
         ClearBackground(LIGHTGRAY);
